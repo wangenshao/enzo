@@ -1,0 +1,59 @@
+name: DEV Pull Multiple Docker Images
+
+on:
+  workflow_dispatch:
+    inputs:
+      docker_images:
+        description: '请填写Docker镜像名称，多个用英文逗号分开'
+        required: true
+        default: 'alpine:latest,busybox:stable-glibc'  # 设置默认值
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 解析 Docker 镜像列表
+        id: parse_images
+        run: |
+          images="${{ github.event.inputs.docker_images }}"
+          echo "IMAGE_LIST=${images}" >> $GITHUB_ENV
+
+      - name: 拉取 Docker 镜像
+        run: |
+          for image in $(echo "$IMAGE_LIST" | tr ',' ' '); do
+            echo "Pulling image: $image"
+            docker pull $image
+          done
+
+      - name: 保存 Docker 镜像到 tar 文件
+        run: |
+          for image in $(echo "$IMAGE_LIST" | tr ',' ' '); do
+            sanitized_image=$(echo $image | tr '/' '_' | tr ':' '_')
+            echo "Saving image: $image to ${sanitized_image}.tar"
+            docker save -o "${sanitized_image}.tar" "$image"
+          done
+
+      - name: 传输 Docker 镜像到服务器
+        uses: appleboy/scp-action@v0.1.3
+        with:
+          host: ${{ secrets.DEV_SERVER_HOST }}
+          username: ${{ secrets.DEV_SERVER_USER }}
+          key: ${{ secrets.DEV_SERVER_SSH_KEY }}
+          port: ${{ secrets.DEV_SERVER_SSH_PORT }}
+          source: "*.tar"
+          target: "/data/images/"
+
+      - name: 远程加载 Docker 镜像
+        uses: appleboy/ssh-action@v0.1.7
+        with:
+          host: ${{ secrets.DEV_SERVER_HOST }}
+          username: ${{ secrets.DEV_SERVER_USER }}
+          key: ${{ secrets.DEV_SERVER_SSH_KEY }}
+          port: ${{ secrets.DEV_SERVER_SSH_PORT }}
+          script: |
+            cd /data/images/
+            for file in *.tar; do
+              echo "Loading image from $file"
+              docker load -i "$file"
+            done
