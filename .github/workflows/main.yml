@@ -31,7 +31,7 @@ jobs:
           key: ${{ secrets.DEV_SERVER_SSH_KEY }}
           port: ${{ secrets.DEV_SERVER_SSH_PORT }}
           source: "image.tar"
-          target: "/root/code/docker/images/"
+          target: "/data/images/"
 
       - name: Load Docker image and run container on server
         uses: appleboy/ssh-action@v0.1.7
@@ -41,5 +41,5 @@ jobs:
           key: ${{ secrets.DEV_SERVER_SSH_KEY }}
           port: ${{ secrets.DEV_SERVER_SSH_PORT }}
           script: |
-            cd /root/code/docker/images/
+            cd /data/images/
             docker load -i image.tar
