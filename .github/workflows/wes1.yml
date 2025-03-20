@@ -1,0 +1,48 @@
+name: DEV Pull Docker Images
+
+on:
+  workflow_dispatch:
+    inputs:
+      images:
+        description: 'List of Docker images to pull (image_name:tag, one per line)'
+        required: true
+        type: string
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Parse and Pull Docker images
+        run: |
+          IFS=$'\n'
+          for image in ${{ github.event.inputs.images }}; do
+            if [[ -n "$image" ]]; then
+              docker pull "$image"
+              image_name=$(echo "$image" | cut -d':' -f1)
+              image_tag=$(echo "$image" | cut -d':' -f2)
+              docker save "$image" -o "$image_name-$image_tag.tar"
+              echo "Saved $image to $image_name-$image_tag.tar"
+              echo "IMAGE_TAR=$image_name-$image_tag.tar" >> $GITHUB_ENV
+              echo "IMAGE_NAME=$image_name" >> $GITHUB_ENV
+              echo "IMAGE_TAG=$image_tag" >> $GITHUB_ENV
+              uses: appleboy/scp-action@v0.1.3
+              with:
+                host: ${{ secrets.DEV_SERVER_HOST }}
+                username: ${{ secrets.DEV_SERVER_USER }}
+                key: ${{ secrets.DEV_SERVER_SSH_KEY }}
+                port: ${{ secrets.DEV_SERVER_SSH_PORT }}
+                source: "$image_name-$image_tag.tar"
+                target: "/data/images/"
+              uses: appleboy/ssh-action@v0.1.7
+              with:
+                host: ${{ secrets.DEV_SERVER_HOST }}
+                username: ${{ secrets.DEV_SERVER_USER }}
+                key: ${{ secrets.DEV_SERVER_SSH_KEY }}
+                port: ${{ secrets.DEV_SERVER_SSH_PORT }}
+                script: |
+                  cd /data/images/
+                  docker load -i $IMAGE_TAR
+              rm "$image_name-$image_tag.tar"
+            fi
+          done
